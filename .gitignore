@@ -25,7 +25,6 @@ replay_pid*
 .idea/
 target/
 uploads/
-application.properties
 application.yml
 application.yaml
 .gitignore.local-backup
