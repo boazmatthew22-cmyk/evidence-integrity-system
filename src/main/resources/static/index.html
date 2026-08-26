@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EvidenceChain</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f7fb;
+            margin: 0;
+            color: #1f2937;
+        }
+
+        header {
+            background: #102a43;
+            color: white;
+            padding: 22px 10%;
+        }
+
+        main {
+            max-width: 900px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            margin-bottom: 24px;
+        }
+
+        input {
+            width: 100%;
+            padding: 11px;
+            margin: 7px 0 16px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+
+        button {
+            background: #0f766e;
+            color: white;
+            padding: 11px 18px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 15px;
+        }
+
+        button:hover {
+            background: #115e59;
+        }
+
+        #message {
+            margin-top: 16px;
+            font-weight: bold;
+        }
+
+        .success {
+            color: #15803d;
+        }
+
+        .error {
+            color: #b91c1c;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            text-align: left;
+        }
+
+        th {
+            background: #eaf2f8;
+        }
+
+        code {
+            font-size: 12px;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>EvidenceChain</h1>
+    <p>Digital Evidence Integrity and Chain of Custody Prototype</p>
+</header>
+
+<main>
+    <section class="card">
+        <h2>Verify Evidence Integrity</h2>
+
+        <form id="verifyForm">
+            <label>Select Registered Evidence</label>
+            <select id="verifyEvidenceId" required
+                    style="width:100%; padding:11px; margin:7px 0 16px; border:1px solid #cbd5e1; border-radius:6px;">
+                <option value="">Choose evidence to verify</option>
+            </select>
+
+            <label>Select File to Verify</label>
+            <input type="file" id="verifyFile" required>
+
+            <button type="submit">Verify File Integrity</button>
+        </form>
+
+        <p id="verifyMessage"></p>
+    </section>
+    <section class="card">
+        <h2>Register Evidence</h2>
+
+        <form id="uploadForm">
+            <label>Case ID</label>
+            <input type="text" id="caseId" required placeholder="Example: CASE-2026-001">
+
+            <label>Uploaded By</label>
+            <input type="text" id="uploadedBy" required placeholder="Example: Officer David">
+
+            <label>Select Evidence File</label>
+            <input type="file" id="file" required>
+
+            <button type="submit">Generate Hash & Store Evidence</button>
+        </form>
+
+        <p id="message"></p>
+    </section>
+
+    <section class="card">
+        <h2>Registered Evidence</h2>
+
+        <table>
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Case ID</th>
+                <th>File Name</th>
+                <th>SHA-256 Hash</th>
+                <th>Status</th>
+            </tr>
+            </thead>
+            <tbody id="evidenceTable"></tbody>
+        </table>
+    </section>
+</main>
+
+<script>
+    const form = document.getElementById("uploadForm");
+    const message = document.getElementById("message");
+    const evidenceTable = document.getElementById("evidenceTable");
+
+    const verifyForm = document.getElementById("verifyForm");
+    const verifyEvidenceId = document.getElementById("verifyEvidenceId");
+    const verifyFile = document.getElementById("verifyFile");
+    const verifyMessage = document.getElementById("verifyMessage");
+
+    form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+
+        const formData = new FormData();
+        formData.append("caseId", document.getElementById("caseId").value);
+        formData.append("uploadedBy", document.getElementById("uploadedBy").value);
+        formData.append("file", document.getElementById("file").files[0]);
+
+        message.className = "";
+        message.textContent = "Uploading file and generating SHA-256 hash...";
+
+        try {
+            const response = await fetch("/api/evidence", {
+                method: "POST",
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error("Upload failed");
+            }
+
+            const evidence = await response.json();
+
+            message.className = "success";
+            message.textContent =
+                "Evidence stored successfully. SHA-256: " + evidence.sha256Hash;
+
+            form.reset();
+            loadEvidence();
+        } catch (error) {
+            message.className = "error";
+            message.textContent = "Could not upload the evidence file.";
+        }
+    });
+
+    verifyForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+
+        const id = verifyEvidenceId.value;
+        const file = verifyFile.files[0];
+
+        if (!id || !file) {
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        verifyMessage.className = "";
+        verifyMessage.textContent = "Calculating hash and verifying evidence...";
+
+        try {
+            const response = await fetch("/api/evidence/" + id + "/verify", {
+                method: "POST",
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error("Verification failed");
+            }
+
+            const result = await response.json();
+
+            if (result.verified) {
+                verifyMessage.className = "success";
+                verifyMessage.textContent =
+                    "VERIFIED: The file is unchanged. Its SHA-256 hash matches the original record.";
+            } else {
+                verifyMessage.className = "error";
+                verifyMessage.textContent =
+                    "TAMPERING DETECTED: The file hash does not match the original evidence hash.";
+            }
+
+            verifyForm.reset();
+            loadEvidence();
+        } catch (error) {
+            verifyMessage.className = "error";
+            verifyMessage.textContent = "Could not verify this file.";
+        }
+    });
+
+    async function loadEvidence() {
+        const response = await fetch("/api/evidence");
+        const evidenceList = await response.json();
+
+        evidenceTable.innerHTML = "";
+        verifyEvidenceId.innerHTML =
+            '<option value="">Choose evidence to verify</option>';
+
+        evidenceList.forEach(function (evidence) {
+            evidenceTable.innerHTML += `
+                <tr>
+                    <td>${evidence.id}</td>
+                    <td>${evidence.caseId}</td>
+                    <td>${evidence.originalFileName}</td>
+                    <td><code>${evidence.sha256Hash}</code></td>
+                    <td>${evidence.status}</td>
+                </tr>
+            `;
+
+            verifyEvidenceId.innerHTML += `
+                <option value="${evidence.id}">
+                    ID ${evidence.id} — ${evidence.originalFileName}
+                </option>
+            `;
+        });
+    }
+
+    loadEvidence();
+</script>
+    const form = document.getElementById("uploadForm");
+    const message = document.getElementById("message");
+    const evidenceTable = document.getElementById("evidenceTable");
+
+    form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+
+        const formData = new FormData();
+        formData.append("caseId", document.getElementById("caseId").value);
+        formData.append("uploadedBy", document.getElementById("uploadedBy").value);
+        formData.append("file", document.getElementById("file").files[0]);
+
+        message.className = "";
+        message.textContent = "Uploading file and generating SHA-256 hash...";
+
+        try {
+            const response = await fetch("/api/evidence", {
+                method: "POST",
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error("Upload failed");
+            }
+
+            const evidence = await response.json();
+
+            message.className = "success";
+            message.textContent =
+                "Evidence stored successfully. SHA-256: " + evidence.sha256Hash;
+
+            form.reset();
+            loadEvidence();
+        } catch (error) {
+            message.className = "error";
+            message.textContent = "Could not upload the evidence file.";
+        }
+    });
+
+    async function loadEvidence() {
+        const response = await fetch("/api/evidence");
+        const evidenceList = await response.json();
+
+        evidenceTable.innerHTML = "";
+
+        evidenceList.forEach(function (evidence) {
+            evidenceTable.innerHTML += `
+                <tr>
+                    <td>${evidence.id}</td>
+                    <td>${evidence.caseId}</td>
+                    <td>${evidence.originalFileName}</td>
+                    <td><code>${evidence.sha256Hash}</code></td>
+                    <td>${evidence.status}</td>
+                </tr>
+            `;
+        });
+    }
+
+    loadEvidence();
+</script>
+
+</body>
+</html>
